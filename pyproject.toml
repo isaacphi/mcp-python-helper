@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Tools to help with python projects"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [ "mcp>=1.1.0",]
+dependencies = [
+ "astor>=0.8.1",
+ "mcp>=1.1.0",
+]
 [[project.authors]]
 name = "Phil"
 email = "isaac.phil@gmail.com"
