@@ -1,0 +1,17 @@
+[project]
+name = "mcp-python-helper"
+version = "0.1.0"
+description = "Tools to help with python projects"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [ "mcp>=1.1.0",]
+[[project.authors]]
+name = "Phil"
+email = "isaac.phil@gmail.com"
+
+[build-system]
+requires = [ "hatchling",]
+build-backend = "hatchling.build"
+
+[project.scripts]
+mcp-python-helper = "mcp_python_helper:main"
