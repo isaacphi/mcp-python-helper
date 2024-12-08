@@ -2,6 +2,14 @@ import ast
 import astor
 
 
+class TargetNotFound(Exception):
+    pass
+
+
+class InvalidPosition(Exception):
+    pass
+
+
 class NodeFinder(ast.NodeVisitor):
     def __init__(self, search):
         self.path = search.split(".")
@@ -40,31 +48,9 @@ class NodeFinder(ast.NodeVisitor):
                 search_text = " ".join(self.search.strip().split())
                 if node_text == search_text:
                     self.found_nodes.append(node)
-            except:
+            except Exception:
                 pass
         super().generic_visit(node)
-
-
-def find_nodes(tree, search):
-    finder = NodeFinder(search)
-    finder.visit(tree)
-    return finder.found_nodes
-
-
-def find_in_file(filename, search):
-    with open(filename, "r") as f:
-        tree = ast.parse(f.read(), filename)
-    nodes = find_nodes(tree, search)
-    return [
-        {
-            "node": node,
-            "line": node.lineno,
-            "column": node.col_offset,
-            "filename": filename,
-        }
-        for node in nodes
-        if hasattr(node, "lineno")
-    ]
 
 
 class NodeModifier(ast.NodeTransformer):
@@ -93,35 +79,48 @@ class NodeModifier(ast.NodeTransformer):
                     idx = node.parent.body.index(node)
                     node.parent.body.insert(idx + 1, self.new_node)
                 return node
+            else:
+                raise InvalidPosition("Invlid position")
         return self.generic_visit(node)
 
 
-def modify_in_file(filename, search, new_code, position="replace"):
+def find_nodes(tree, search):
+    finder = NodeFinder(search)
+    finder.visit(tree)
+    return finder.found_nodes
+
+
+def find_in_file(filename, search):
     with open(filename, "r") as f:
-        source = f.read()
-        tree = ast.parse(source)
+        tree = ast.parse(f.read(), filename)
+    nodes = find_nodes(tree, search)
+    return [
+        {
+            "node": node,
+            "line": node.lineno,
+            "column": node.col_offset,
+            "filename": filename,
+        }
+        for node in nodes
+        if hasattr(node, "lineno")
+    ]
+
+
+def modify_source(source, new_code, target, position):
+    tree = ast.parse(source)
 
     # Add parent references
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
             child.parent = parent
 
-    nodes = find_nodes(tree, search)
+    nodes = find_nodes(tree, target)
     if not nodes:
-        return False
+        raise TargetNotFound("Target not found")
 
     for node in nodes:
         modifier = NodeModifier(node, new_code, position)
         tree = modifier.visit(tree)
 
     modified_source = astor.to_source(tree)
-    with open(filename, "w") as f:
-        f.write(modified_source)
-    return True
-
-
-# results = find_in_file("example.py", "test = False")
-# for result in results:
-#     print(f"Found at {result['filename']}:{result['line']}:{result['column']}")
-
-modify_in_file("example.py", "my_method", "import os", "replace")
+    return modified_source
