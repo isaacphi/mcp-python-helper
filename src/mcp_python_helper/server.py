@@ -19,54 +19,61 @@ logger = logging.getLogger(__name__)
 server = Server("mcp-python-helper")
 
 
+def normalize_code(code: str) -> str:
+    """Normalize code by removing indentation and extra whitespace"""
+    lines = code.strip().split("\n")
+    # Remove empty lines
+    lines = [line.strip() for line in lines if line.strip()]
+    return "\n".join(lines)
+
+
 class CodeLocator(ast.NodeVisitor):
     """Helper class to locate where to insert/replace code in the AST."""
 
-    def __init__(self, target_name: str):
-        self.target_name = target_name
+    def __init__(self, target_code: str):
+        self.target_code = normalize_code(target_code)
         self.target_node = None
-        self.containing_node = None  # The node that contains our target in its body
-        self.target_index = None  # Index in the containing node's body
-        logger.debug(f"CodeLocator initialized with target: {target_name}")
+        self.containing_node = None
+        self.target_index = None
+        logger.debug(
+            f"CodeLocator initialized with normalized target code: {self.target_code}"
+        )
 
-    def generic_visit(self, node):
-        """Implement parent tracking for specific node types"""
-        # Check if this node contains a body field
+    def check_node_match(self, node) -> bool:
+        """Check if a node matches our target code"""
+        try:
+            node_code = normalize_code(astor.to_source(node))
+            logger.debug(
+                f"Comparing normalized codes:\nTarget: {self.target_code}\nNode  : {node_code}"
+            )
+            return node_code == self.target_code
+        except Exception as e:
+            logger.debug(f"Error comparing node: {e}")
+            return False
+
+    def visit(self, node):
+        """Visit a node and check for matches"""
         if hasattr(node, "body"):
             logger.debug(f"Checking body of {type(node).__name__}")
-            # Look for nodes that match our target
             for i, child in enumerate(node.body):
-                if isinstance(child, ast.Assign) and any(
-                    isinstance(target, ast.Name) and target.id == self.target_name
-                    for target in child.targets
-                ):
-                    logger.debug(f"Found target assignment in {type(node).__name__}")
+                if self.check_node_match(child):
+                    logger.debug(f"Found matching node in {type(node).__name__}")
                     self.target_node = child
                     self.containing_node = node
                     self.target_index = i
                     return
-                elif (
-                    isinstance(child, (ast.ClassDef, ast.FunctionDef))
-                    and child.name == self.target_name
-                ):
-                    logger.debug(
-                        f"Found target class/function in {type(node).__name__}"
-                    )
-                    self.target_node = child
-                    self.containing_node = node
-                    self.target_index = i
-                    return
-
-        # Continue searching
-        for child in ast.iter_child_nodes(node):
-            self.visit(child)
+                # Continue searching in this child's body if it has one
+                self.visit(child)
+        else:
+            # For nodes without a body, visit their children
+            super().generic_visit(node)
 
 
 def modify_source(source_code: str, new_code: str, target: str, position: str) -> str:
     """Modify source code by inserting or replacing code at the specified location."""
 
     logger.debug(f"Modifying source code:")
-    logger.debug(f"Target: {target}")
+    logger.debug(f"Target code: {target}")
     logger.debug(f"Position: {position}")
     logger.debug(f"New code:\n{new_code}")
 
@@ -89,8 +96,8 @@ def modify_source(source_code: str, new_code: str, target: str, position: str) -
     locator.visit(tree)
 
     if not locator.target_node:
-        logger.error(f"Could not find target '{target}' in the source code")
-        raise ValueError(f"Could not find target '{target}' in the source code")
+        logger.error(f"Could not find target code in the source")
+        raise ValueError(f"Could not find target code in the source")
 
     if not locator.containing_node:
         logger.error("Failed to find containing node")
@@ -156,7 +163,7 @@ async def handle_list_tools() -> list[types.Tool]:
                     },
                     "target": {
                         "type": "string",
-                        "description": "Name of the target function, class, or variable to locate",
+                        "description": "The code snippet to target (e.g., 'var = 3' or 'def my_function():'). Indentation is ignored.",
                     },
                     "position": {
                         "type": "string",
