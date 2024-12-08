@@ -1,114 +1,130 @@
 import asyncio
-import logging
 import json
+import logging
 import sys
-from typing import Dict, Any, List
 from pathlib import Path
+from typing import Dict, Any, List, Optional, AsyncIterator
+from dataclasses import dataclass
 
-from pylsp_jsonrpc.streams import JsonRpcStreamWriter
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
-class CustomJsonRpcStreamReader:
-    def __init__(self, rfile):
-        self._rfile = rfile
-        self._buffer = ""
-        self._message_queue = asyncio.Queue()
-        self._stop_event = asyncio.Event()
-        self.logger = logging.getLogger("LSPClient.StreamReader")
+@dataclass
+class Position:
+    line: int
+    character: int
 
-    async def listen(self, message_consumer):
+
+@dataclass
+class Range:
+    start: Position
+    end: Position
+
+
+@dataclass
+class Location:
+    uri: str
+    range: Range
+
+
+@dataclass
+class SymbolInformation:
+    name: str
+    kind: int
+    location: Location
+    container_name: Optional[str] = None
+
+    @staticmethod
+    def from_dict(data: Dict[str, Any]) -> "SymbolInformation":
+        return SymbolInformation(
+            name=data["name"],
+            kind=data["kind"],
+            location=Location(
+                uri=data["location"]["uri"],
+                range=Range(
+                    start=Position(**data["location"]["range"]["start"]),
+                    end=Position(**data["location"]["range"]["end"]),
+                ),
+            ),
+            container_name=data.get("containerName"),
+        )
+
+
+class LSPProtocolReader:
+    def __init__(self, reader: asyncio.StreamReader):
+        self.reader = reader
+
+    async def read_message(self) -> Optional[Dict[str, Any]]:
+        """Read a single LSP message."""
         try:
-            while not self._stop_event.is_set():
-                try:
-                    self.logger.debug("Waiting for header...")
-                    header = await self._read_header()
-                    if not header:
-                        self.logger.warning("No header received, breaking loop")
-                        break
+            # Read headers
+            content_length = None
+            while True:
+                header = await self.reader.readline()
+                if not header:
+                    return None
 
-                    content_length = self._get_content_length(header)
-                    if content_length is None:
-                        self.logger.warning("No content length in header")
-                        continue
-
-                    self.logger.debug(f"Reading content with length: {content_length}")
-                    content = await self._rfile.read(content_length)
-                    if not content:
-                        self.logger.warning("No content received")
-                        break
-
-                    message = json.loads(content.decode("utf-8"))
-                    self.logger.debug(f"Received message: {message}")
-                    message_consumer(message)
-                except Exception as e:
-                    self.logger.error(f"Error reading message: {e}", exc_info=True)
+                header = header.decode("utf-8").strip()
+                if not header:
                     break
-        except Exception as e:
-            self.logger.error(f"Error in listen loop: {e}", exc_info=True)
 
-    async def _read_header(self):
-        header = []
-        while True:
-            line = await self._rfile.readline()
-            if not line:
+                if header.startswith("Content-Length: "):
+                    content_length = int(header.split(": ")[1])
+
+            if content_length is None:
+                logger.warning("No Content-Length header found")
                 return None
 
-            line = line.decode("utf-8").strip()
-            if not line:
-                break
-            header.append(line)
-            self.logger.debug(f"Header line: {line}")
-        return header
+            # Read content
+            content = await self.reader.readexactly(content_length)
+            return json.loads(content.decode("utf-8"))
 
-    def _get_content_length(self, header):
-        for line in header:
-            if line.startswith("Content-Length: "):
-                return int(line.split(": ")[1])
-        return None
-
-    def stop(self):
-        self._stop_event.set()
-
-
-class CustomJsonRpcStreamWriter:
-    def __init__(self, wfile):
-        self._wfile = wfile
-        self._encoder = json.JSONEncoder()
-        self.logger = logging.getLogger("LSPClient.StreamWriter")
-
-    async def write(self, message):
-        try:
-            self.logger.debug(f"Writing message: {message}")
-            body = self._encoder.encode(message)
-            content_length = len(body.encode("utf-8"))
-            response = (
-                f"Content-Length: {content_length}\r\n"
-                f"Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n"
-                f"\r\n"
-                f"{body}"
-            )
-            self._wfile.write(response.encode("utf-8"))
-            await self._wfile.drain()
-            self.logger.debug("Message written successfully")
+        except asyncio.IncompleteReadError:
+            logger.error("Connection closed while reading")
+            return None
         except Exception as e:
-            self.logger.error(f"Error writing to stream: {e}", exc_info=True)
+            logger.error(f"Error reading message: {e}")
+            return None
+
+
+class LSPProtocolWriter:
+    def __init__(self, writer: asyncio.StreamWriter):
+        self.writer = writer
+
+    async def write_message(self, message: Dict[str, Any]):
+        """Write a single LSP message."""
+        try:
+            body = json.dumps(message)
+            content = body.encode("utf-8")
+            header = f"Content-Length: {len(content)}\r\n\r\n"
+
+            self.writer.write(header.encode("utf-8"))
+            self.writer.write(content)
+            await self.writer.drain()
+
+        except Exception as e:
+            logger.error(f"Error writing message: {e}")
             raise
 
 
 class LSPClient:
     def __init__(self):
-        self.server_process = None
-        self.writer = None
+        self.process = None
         self.reader = None
+        self.writer = None
         self.request_id = 0
-        self._response_futures = {}
-        self.logger = logging.getLogger("LSPClient.LSPClient")
+        self.response_handlers = {}
+        self.notification_handlers = {}
+        self.initialized = False
+        self._message_loop_task = None
 
-    async def start_server(self):
-        """Start the LSP server process."""
+    async def start(self, workspace_path: Optional[str] = None):
+        """Start the LSP server and initialize the connection."""
         try:
-            self.logger.info("Starting LSP server...")
-            self.server_process = await asyncio.create_subprocess_exec(
+            # Start pylsp process
+            self.process = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
                 "pylsp",
@@ -117,73 +133,118 @@ class LSPClient:
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            if self.server_process.stdin is None or self.server_process.stdout is None:
-                raise RuntimeError("Failed to establish subprocess pipes")
+            if not self.process.stdin or not self.process.stdout:
+                raise RuntimeError("Failed to start LSP server")
 
-            self.reader = CustomJsonRpcStreamReader(self.server_process.stdout)
-            self.writer = CustomJsonRpcStreamWriter(self.server_process.stdin)
+            # Create StreamReader and StreamWriter
+            loop = asyncio.get_event_loop()
+            transport, protocol = await loop.connect_write_pipe(
+                asyncio.Protocol, self.process.stdin
+            )
+            writer = asyncio.StreamWriter(transport, protocol, None, loop)
 
-            # Start error output monitoring
-            self._stderr_task = asyncio.create_task(self._monitor_stderr())
+            reader = asyncio.StreamReader()
+            protocol = asyncio.StreamReaderProtocol(reader)
+            await loop.connect_read_pipe(lambda: protocol, self.process.stdout)
 
-            # Start message handling task
-            self._message_task = asyncio.create_task(
-                self.reader.listen(self._handle_message)
+            # Create protocol reader/writer
+            self.reader = LSPProtocolReader(reader)
+            self.writer = LSPProtocolWriter(writer)
+
+            # Start message handling loop
+            self._message_loop_task = asyncio.create_task(self._handle_messages())
+
+            # Initialize the server
+            workspace_uri = str(Path(workspace_path or Path.cwd()).absolute().as_uri())
+            response = await self.send_request(
+                "initialize",
+                {
+                    "processId": None,
+                    "rootUri": workspace_uri,
+                    "capabilities": {
+                        "textDocument": {
+                            "hover": {"contentFormat": ["markdown", "plaintext"]},
+                            "definition": True,
+                            "references": True,
+                            "completion": {"completionItem": {"snippetSupport": True}},
+                            "documentSymbol": True,
+                        }
+                    },
+                },
             )
 
-            self.logger.info("Initializing LSP server...")
-            # Initialize the LSP server
-            init_response = await self.initialize()
-            self.logger.info(f"Server initialized with response: {init_response}")
+            logger.info(f"Server initialized: {response}")
+            await self.send_notification("initialized", {})
+            self.initialized = True
 
-            return init_response
         except Exception as e:
-            self.logger.error(f"Error starting server: {e}", exc_info=True)
-            await self.close()
+            logger.error(f"Error starting LSP server: {e}")
+            await self.shutdown()
             raise
 
-    async def _monitor_stderr(self):
-        """Monitor the server's stderr for debugging purposes."""
+    async def _handle_messages(self):
+        """Handle incoming messages from the LSP server."""
         while True:
-            if self.server_process.stderr:
-                line = await self.server_process.stderr.readline()
-                if line:
-                    self.logger.warning(f"LSP Server stderr: {line.decode().strip()}")
-                else:
+            try:
+                message = await self.reader.read_message()
+                if message is None:
                     break
 
-    def _handle_message(self, message):
-        self.logger.debug(f"Handling message: {message}")
-        if "id" in message and message["id"] in self._response_futures:
-            future = self._response_futures.pop(message["id"])
-            if not future.done():
-                if "error" in message:
-                    self.logger.error(f"Error in response: {message['error']}")
-                    future.set_exception(Exception(f"LSP error: {message['error']}"))
-                else:
-                    self.logger.debug(f"Setting result for request {message['id']}")
-                    future.set_result(message.get("result", {}))
+                logger.debug(f"Received message: {message}")
 
-    async def initialize(self):
-        """Initialize the LSP connection."""
-        params = {
-            "processId": None,
-            "rootUri": str(Path.cwd().as_uri()),
-            "capabilities": {
-                "textDocument": {
-                    "hover": {"contentFormat": ["markdown", "plaintext"]},
-                    "definition": True,
-                    "references": True,
-                    "completion": {"completionItem": {"snippetSupport": True}},
+                if "method" in message:  # This is a request or notification
+                    if "id" in message:  # This is a request
+                        response = await self._handle_request(message)
+                        if response:
+                            await self.writer.write_message(response)
+                    else:  # This is a notification
+                        await self._handle_notification(message)
+                elif "id" in message:  # This is a response
+                    await self._handle_response(message)
+
+            except Exception as e:
+                logger.error(f"Error handling message: {e}")
+                break
+
+    async def _handle_request(
+        self, request: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Handle incoming requests from the server."""
+        method = request["method"]
+        handler = self.request_handlers.get(method)
+        if handler:
+            try:
+                result = await handler(request["params"])
+                return {"jsonrpc": "2.0", "id": request["id"], "result": result}
+            except Exception as e:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request["id"],
+                    "error": {"code": -32603, "message": str(e)},
                 }
-            },
-        }
+        return None
 
-        response = await self.send_request("initialize", params)
-        await self.send_notification("initialized", {})
-        return response
+    async def _handle_notification(self, notification: Dict[str, Any]):
+        """Handle incoming notifications from the server."""
+        method = notification["method"]
+        handler = self.notification_handlers.get(method)
+        if handler:
+            try:
+                await handler(notification["params"])
+            except Exception as e:
+                logger.error(f"Error handling notification {method}: {e}")
 
-    async def send_request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_response(self, response: Dict[str, Any]):
+        """Handle responses to our requests."""
+        response_id = response["id"]
+        handler = self.response_handlers.pop(response_id, None)
+        if handler:
+            if "error" in response:
+                handler.set_exception(Exception(f"LSP error: {response['error']}"))
+            else:
+                handler.set_result(response.get("result"))
+
+    async def send_request(self, method: str, params: Dict[str, Any]) -> Any:
         """Send a request to the LSP server and wait for the response."""
         self.request_id += 1
         request = {
@@ -193,160 +254,146 @@ class LSPClient:
             "params": params,
         }
 
-        self.logger.debug(f"Sending request {self.request_id}: {method}")
-        self.logger.debug(f"Parameters: {params}")
-
-        # Create a future for this request
+        logger.debug(f"Sending request: {request}")
         future = asyncio.Future()
-        self._response_futures[self.request_id] = future
-
-        # Send the request
-        await self.writer.write(request)
+        self.response_handlers[self.request_id] = future
 
         try:
-            response = await asyncio.wait_for(future, timeout=5.0)
-            self.logger.debug(
-                f"Received response for request {self.request_id}: {response}"
-            )
-            return response
+            await self.writer.write_message(request)
+            return await asyncio.wait_for(future, timeout=30.0)
         except asyncio.TimeoutError:
-            self.logger.error(
-                f"Timeout waiting for response to request {self.request_id}"
-            )
-            self._response_futures.pop(self.request_id, None)
-            return {}
+            logger.error(f"Timeout waiting for response to {method}")
+            self.response_handlers.pop(self.request_id, None)
+            raise
         except Exception as e:
-            self.logger.error(
-                f"Error processing request {self.request_id}: {e}", exc_info=True
-            )
-            return {}
+            logger.error(f"Error sending request {method}: {e}")
+            self.response_handlers.pop(self.request_id, None)
+            raise
 
     async def send_notification(self, method: str, params: Dict[str, Any]):
         """Send a notification to the LSP server."""
         notification = {"jsonrpc": "2.0", "method": method, "params": params}
-        await self.writer.write(notification)
-
-    async def get_hover_info(self, file_path: str, line: int, character: int) -> str:
-        """Get hover information for a specific position in a file."""
-        params = {
-            "textDocument": {"uri": str(Path(file_path).absolute().as_uri())},
-            "position": {"line": line, "character": character},
-        }
-
-        response = await self.send_request("textDocument/hover", params)
-        print(response)
-        if "contents" in response:
-            if isinstance(response["contents"], dict):
-                return response["contents"].get(
-                    "value", "No hover information available"
-                )
-            return str(response["contents"])
-        return "No hover information available"
-
-    async def get_definitions(
-        self, file_path: str, line: int, character: int
-    ) -> List[Dict[str, Any]]:
-        """Get definitions for a symbol at a specific position."""
-        params = {
-            "textDocument": {"uri": str(Path(file_path).absolute().as_uri())},
-            "position": {"line": line, "character": character},
-        }
-
-        return await self.send_request("textDocument/definition", params)
-
-    async def get_references(
-        self, file_path: str, line: int, character: int
-    ) -> List[Dict[str, Any]]:
-        """Get all references to a symbol at a specific position."""
-        params = {
-            "textDocument": {"uri": str(Path(file_path).absolute().as_uri())},
-            "position": {"line": line, "character": character},
-            "context": {"includeDeclaration": True},
-        }
-
-        return await self.send_request("textDocument/references", params)
-
-    async def initialize(self):
-        """Initialize the LSP connection."""
-        params = {
-            "processId": None,
-            "rootUri": str(Path.cwd().as_uri()),
-            "capabilities": {
-                "textDocument": {
-                    "hover": {"contentFormat": ["markdown", "plaintext"]},
-                    "definition": True,
-                    "references": True,
-                    "completion": {"completionItem": {"snippetSupport": True}},
-                }
-            },
-        }
-
-        response = await self.send_request("initialize", params)
-        await self.send_notification("initialized", {})
-        return response
+        logger.debug(f"Sending notification: {notification}")
+        await self.writer.write_message(notification)
 
     async def did_open(self, file_path: str):
         """Notify the server that a file has been opened."""
-        with open(file_path, "r") as f:
-            text = f.read()
-
-        params = {
-            "textDocument": {
-                "uri": str(Path(file_path).absolute().as_uri()),
-                "languageId": "python",
-                "version": 1,
-                "text": text,
-            }
-        }
-
-        self.logger.info(f"Sending textDocument/didOpen for {file_path}")
-        await self.send_notification("textDocument/didOpen", params)
-
-    async def close(self):
-        """Properly shut down the LSP server."""
         try:
-            if hasattr(self, "_message_task"):
-                self.reader.stop()
-                await self._message_task
+            uri = str(Path(file_path).absolute().as_uri())
+            with open(file_path, "r") as f:
+                text = f.read()
 
-            if self.server_process:
+            await self.send_notification(
+                "textDocument/didOpen",
+                {
+                    "textDocument": {
+                        "uri": uri,
+                        "languageId": "python",
+                        "version": 1,
+                        "text": text,
+                    }
+                },
+            )
+        except Exception as e:
+            logger.error(f"Error opening document {file_path}: {e}")
+            raise
+
+    async def get_hover(
+        self, file_path: str, line: int, character: int
+    ) -> Optional[str]:
+        """Get hover information for a position in a file."""
+        try:
+            uri = str(Path(file_path).absolute().as_uri())
+            response = await self.send_request(
+                "textDocument/hover",
+                {
+                    "textDocument": {"uri": uri},
+                    "position": {"line": line, "character": character},
+                },
+            )
+
+            if response and "contents" in response:
+                contents = response["contents"]
+                if isinstance(contents, dict):
+                    return contents.get("value")
+                elif isinstance(contents, list):
+                    return "\n".join(str(c) for c in contents)
+                return str(contents)
+            return None
+        except Exception as e:
+            logger.error(f"Error getting hover info: {e}")
+            return None
+
+    async def find_references(
+        self, file_path: str, line: int, character: int
+    ) -> List[Location]:
+        """Find all references to a symbol."""
+        try:
+            uri = str(Path(file_path).absolute().as_uri())
+            response = await self.send_request(
+                "textDocument/references",
+                {
+                    "textDocument": {"uri": uri},
+                    "position": {"line": line, "character": character},
+                    "context": {"includeDeclaration": True},
+                },
+            )
+
+            return [Location(**loc) for loc in response or []]
+        except Exception as e:
+            logger.error(f"Error finding references: {e}")
+            return []
+
+    async def shutdown(self):
+        """Shut down the LSP server."""
+        try:
+            if self.initialized:
                 await self.send_request("shutdown", None)
                 await self.send_notification("exit", None)
-                self.server_process.terminate()
-                await self.server_process.wait()
+
+            if self._message_loop_task:
+                self._message_loop_task.cancel()
+                try:
+                    await self._message_loop_task
+                except asyncio.CancelledError:
+                    pass
+
+            if self.process:
+                self.process.terminate()
+                await self.process.wait()
+
         except Exception as e:
-            print(f"Error during shutdown: {e}")
+            logger.error(f"Error during shutdown: {e}")
+        finally:
+            self.initialized = False
 
 
 async def main():
     # Example usage
     client = LSPClient()
-    await client.start_server()
-
-    # Example file path - replace with your actual Python file
-    file_path = "example.py"
-
     try:
-        # First, notify the server that we're opening the file
+        await client.start()
+
+        # Example: Open a file and get hover information
+        file_path = __file__  # Use this file as an example
         await client.did_open(file_path)
 
-        # Wait a moment for the server to process the file
-        await asyncio.sleep(1)
+        # Get hover information for the LSPClient class definition
+        hover_info = await client.get_hover(
+            file_path, 85, 10
+        )  # Adjust line/char as needed
+        print(f"\nHover information:\n{hover_info}")
 
-        # Get hover information for a symbol
-        hover_info = await client.get_hover_info(file_path, 6, 0)
-        print(f"Hover information: {hover_info}")
-
-        # Get definitions
-        definitions = await client.get_definitions(file_path, 6, 0)
-        print(f"Definitions: {definitions}")
-
-        # Get references
-        references = await client.get_references(file_path, 7, 0)
-        print(f"References: {references}")
+        # Find references
+        references = await client.find_references(
+            file_path, 85, 10
+        )  # Adjust line/char as needed
+        print("\nReferences:")
+        for ref in references:
+            print(f"- {ref.uri}:{ref.range.start.line}:{ref.range.start.character}")
 
     finally:
-        await client.close()
+        await client.shutdown()
 
 
 if __name__ == "__main__":
