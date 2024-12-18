@@ -27,7 +27,7 @@ def _format_lsp_message(prefix: str, msg: dict[str, Any]) -> str:
 
 
 class LSPServer:
-    def __init__(self) -> None:
+    def __init__(self, workspace_root: Path) -> None:
         self._process: Optional[subprocess.Popen] = None
         self._write_pipe: Optional[os.IOBase] = None
         self._read_pipe: Optional[os.IOBase] = None
@@ -40,12 +40,13 @@ class LSPServer:
         self._server_capabilities: dict[str, Any] = {}
         self._workspace_folders: list[dict[str, str]] = []
         self._document_versions: dict[str, int] = {}
+        self.workspace_root: Path = workspace_root
 
     def _get_next_id(self) -> int:
         self._msg_id += 1
         return self._msg_id
 
-    async def initialize(self, workspace_root: Path) -> None:
+    async def initialize(self) -> None:
         if self._is_initialized:
             return
 
@@ -56,8 +57,10 @@ class LSPServer:
         self._write_pipe = os.fdopen(self._write_fd, "wb")
         self._read_pipe = os.fdopen(self._lsp_read_fd, "rb")
 
-        workspace_uri = f"file://{workspace_root.absolute()}"
-        self._workspace_folders = [{"uri": workspace_uri, "name": workspace_root.name}]
+        workspace_uri = f"file://{self.workspace_root.absolute()}"
+        self._workspace_folders = [
+            {"uri": workspace_uri, "name": self.workspace_root.name}
+        ]
 
         # Start server with debug logging
         logger.info("Starting pyright-langserver...")
@@ -149,7 +152,7 @@ class LSPServer:
         await self._notify("initialized", {})
 
         # Load pyright configuration if it exists
-        pyrightconfig_path = workspace_root / "pyrightconfig.json"
+        pyrightconfig_path = self.workspace_root / "pyrightconfig.json"
         config = {}
         if pyrightconfig_path.exists():
             try:
@@ -183,7 +186,7 @@ class LSPServer:
         )
 
         # Open a document to trigger project analysis
-        main_py = workspace_root / "main.py"
+        main_py = self.workspace_root / "main.py"
         if main_py.exists():
             logger.info(f"Opening main.py to trigger analysis: {main_py}")
             try:
@@ -400,4 +403,3 @@ class LSPServer:
             if self._read_pipe:
                 self._read_pipe.close()
             logger.info("Server shutdown complete")
-

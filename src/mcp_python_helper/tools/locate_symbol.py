@@ -48,11 +48,11 @@ class LocateSymbolTool:
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
         try:
             # Initialize server if needed
-            if not self._server:
-                self._server = LSPServer()
-
             workspace_path = Path(args.workspace_root)
-            await self._server.initialize(workspace_path)
+
+            if not self._server or self._server.workspace_root != workspace_path:
+                self._server = LSPServer(workspace_path)
+                await self._server.initialize()
 
             # Find the symbol
             locations = await self._server.find_symbol(args.symbol)
