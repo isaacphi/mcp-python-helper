@@ -3,9 +3,11 @@ from typing import Any
 import mcp.types as types
 
 from .edit_python_code import EditPythonTool
+from .locate_symbol import LocateSymbolTool
 
 TOOLS = [
     EditPythonTool(),
+    LocateSymbolTool(),
 ]
 
 

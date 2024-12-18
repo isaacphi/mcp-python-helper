@@ -1,0 +1,10 @@
+{
+    "include": [
+        "."
+    ],
+    "analysis": {
+        "autoSearchPaths": true,
+        "useLibraryCodeForTypes": true,
+        "diagnosticMode": "workspace"
+    }
+}
