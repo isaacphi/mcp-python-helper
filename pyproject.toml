@@ -7,6 +7,7 @@ requires-python = "==3.10"
 dependencies = [
  "astor>=0.8.1",
  "mcp>=1.1.0",
+ "pydantic>=2.10.3",
  "pylance>=0.20.0",
  "pyright>=1.1.390",
  "python-language-server>=0.36.2",

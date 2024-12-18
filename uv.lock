@@ -173,6 +173,7 @@ source = { editable = "." }
 dependencies = [
     { name = "astor" },
     { name = "mcp" },
+    { name = "pydantic" },
     { name = "pylance" },
     { name = "pyright" },
     { name = "python-language-server" },
@@ -183,6 +184,7 @@ dependencies = [
 requires-dist = [
     { name = "astor", specifier = ">=0.8.1" },
     { name = "mcp", specifier = ">=1.1.0" },
+    { name = "pydantic", specifier = ">=2.10.3" },
     { name = "pylance", specifier = ">=0.20.0" },
     { name = "pyright", specifier = ">=1.1.390" },
     { name = "python-language-server", specifier = ">=0.36.2" },

@@ -179,8 +179,10 @@ async def test_diagnostics():
         )
 
         # Open document
-        doc_uri = f"file://{Path('example.py').absolute()}"
-        doc_content = Path("example.py").read_text()
+        doc_uri = f"file://{Path('src/mcp_python_helper/test_fixtures/sample_python_code.py').absolute()}"
+        doc_content = Path(
+            "src/mcp_python_helper/test_fixtures/sample_python_code.py"
+        ).read_text()
 
         await write_message(
             {

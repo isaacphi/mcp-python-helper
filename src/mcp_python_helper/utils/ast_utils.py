@@ -1,3 +1,4 @@
+from typing import Any, Dict, List
 import ast
 import astor
 
@@ -15,13 +16,13 @@ class InvalidPosition(Exception):
 
 
 class NodeFinder(ast.NodeVisitor):
-    def __init__(self, search):
+    def __init__(self, search: str):
         self.path = search.split(".")
         self.search = search
-        self.found_nodes = []
-        self.current_class = None
+        self.found_nodes: List[ast.AST] = []
+        self.current_class: ast.ClassDef | None = None
 
-    def visit_ClassDef(self, node):
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
         if node.name == self.path[0]:
             if len(self.path) == 1:
                 self.found_nodes.append(node)
@@ -33,7 +34,7 @@ class NodeFinder(ast.NodeVisitor):
         else:
             self.generic_visit(node)
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         if (
             len(self.path) == 2
             and self.current_class
@@ -45,7 +46,7 @@ class NodeFinder(ast.NodeVisitor):
             self.found_nodes.append(node)
         self.generic_visit(node)
 
-    def generic_visit(self, node):
+    def generic_visit(self, node: ast.AST) -> None:
         if hasattr(node, "lineno") and isinstance(node, ast.stmt):
             try:
                 node_text = " ".join(astor.to_source(node).strip().split())
@@ -58,14 +59,13 @@ class NodeFinder(ast.NodeVisitor):
 
 
 class NodeModifier(ast.NodeTransformer):
-    def __init__(self, target_node, new_code, position="replace"):
+    def __init__(self, target_node: ast.AST, new_code: str, position: str = "replace"):
         self.target_node = target_node
         self.new_node = ast.parse(new_code).body[0]
         self.position = position
-        self.stop_after_found = True
         self.skip_next = False
 
-    def visit(self, node):
+    def visit(self, node: ast.AST) -> ast.AST:
         if self.skip_next:
             self.skip_next = False
             return node
@@ -73,10 +73,9 @@ class NodeModifier(ast.NodeTransformer):
             if self.position == "replace":
                 return self.new_node
             elif self.position == "before":
-                # if isinstance(node.parent, ast.Module):
                 self.skip_next = True
-                idx = node.parent.body.index(node)
-                node.parent.body.insert(idx, self.new_node)
+                idx = node.parent.body.index(node)  # type: ignore
+                node.parent.body.insert(idx, self.new_node)  # type: ignore
                 return self.new_node
             elif self.position == "after":
                 if isinstance(node.parent, ast.Module):
@@ -84,17 +83,17 @@ class NodeModifier(ast.NodeTransformer):
                     node.parent.body.insert(idx + 1, self.new_node)
                 return node
             else:
-                raise InvalidPosition("Invlid position")
+                raise InvalidPosition("Invalid position")
         return self.generic_visit(node)
 
 
-def find_nodes(tree, search):
+def find_nodes(tree: ast.AST, search: str) -> List[ast.AST]:
     finder = NodeFinder(search)
     finder.visit(tree)
     return finder.found_nodes
 
 
-def find_in_file(filename, search):
+def find_in_file(filename: str, search: str) -> List[Dict[str, Any]]:
     with open(filename, "r") as f:
         tree = ast.parse(f.read(), filename)
     nodes = find_nodes(tree, search)
@@ -110,13 +109,12 @@ def find_in_file(filename, search):
     ]
 
 
-def modify_source(source, new_code, target, position):
+def modify_source(source: str, new_code: str, target: str, position: str) -> str:
     tree = ast.parse(source)
 
-    # Add parent references
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent
+            child.parent = parent  # type: ignore
 
     nodes = find_nodes(tree, target)
     if not nodes:
@@ -129,5 +127,4 @@ def modify_source(source, new_code, target, position):
         modifier = NodeModifier(node, new_code, position)
         tree = modifier.visit(tree)
 
-    modified_source = astor.to_source(tree)
-    return modified_source
+    return astor.to_source(tree)
