@@ -1,5 +1,5 @@
 import ast
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import astor
 
@@ -26,7 +26,7 @@ class NodeFinder(ast.NodeVisitor):
         self.path = search.split(".")
         self.search = search
         self.found_nodes: list[ExtendedAST] = []
-        self.current_class: Optional[ast.ClassDef] = None
+        self.current_class: ast.ClassDef | None = None
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
         if node.name == self.path[0]:
@@ -71,7 +71,7 @@ class NodeModifier(ast.NodeTransformer):
         self.position = position
         self.skip_next = False
 
-    def visit(self, node: Union[ast.AST, ExtendedAST]) -> ast.AST:
+    def visit(self, node: ast.AST | ExtendedAST) -> ast.AST:
         if self.skip_next:
             self.skip_next = False
             return node
@@ -124,7 +124,7 @@ def modify_source(source: str, new_code: str, target: str, position: str) -> str
     # Add parent references to all nodes
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            setattr(child, 'parent', parent)  # type: ignore
+            child.parent = parent  # type: ignore
 
     nodes = find_nodes(tree, target)
     if not nodes:
