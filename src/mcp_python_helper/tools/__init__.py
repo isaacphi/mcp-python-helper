@@ -1,31 +1,19 @@
-from typing import Dict, Any, Callable, Awaitable, List
+from typing import List
 import mcp.types as types
-from . import edit_python_code
-
-# Type for tool handler functions
-ToolHandler = Callable[
-    [Dict[str, Any]], 
-    Awaitable[List[types.TextContent | types.ImageContent | types.EmbeddedResource]]
-]
-
-# Map of tool names to their handler functions
-TOOL_HANDLERS: Dict[str, ToolHandler] = {
-    "edit-python-code": edit_python_code.handle_tool,
-}
+from .edit_python_code import EditPythonTool
 
 # List of all available tools
 TOOLS = [
-    edit_python_code.get_tool_definition(),
+    EditPythonTool(),
 ]
 
-async def get_tools() -> List[types.Tool]:
-    return TOOLS
 
-async def call_tool(name: str, arguments: Dict[str, Any] | None) -> List[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-    if name not in TOOL_HANDLERS:
-        raise ValueError(f"Unknown tool: {name}")
+def get_tools() -> List[types.Tool]:
+    return [tool.get_definition() for tool in TOOLS]
 
-    if not arguments:
-        raise ValueError("Missing arguments")
 
-    return await TOOL_HANDLERS[name](arguments)
+async def handle_tool_call(name: str, arguments: dict | None):
+    for tool in TOOLS:
+        if tool.name == name:
+            return await tool.execute(arguments)
+    raise ValueError(f"Unknown tool: {name}")

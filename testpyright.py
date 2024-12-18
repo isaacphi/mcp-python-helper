@@ -1,11 +1,10 @@
-import sys
-import subprocess
+import asyncio
 import json
 import logging
-import asyncio
 import os
-from pathlib import Path
 import signal
+import subprocess
+from pathlib import Path
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("pyright_debug")
@@ -32,7 +31,7 @@ async def test_diagnostics():
 
     def encode_message(msg):
         content = json.dumps(msg).encode("utf-8")
-        header = f"Content-Length: {len(content)}\r\n\r\n".encode("utf-8")
+        header = f"Content-Length: {len(content)}\r\n\r\n".encode()
         return header + content
 
     async def write_message(msg):
