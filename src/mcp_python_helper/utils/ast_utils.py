@@ -1,9 +1,7 @@
 import ast
-from typing import Any, Optional, TypeVar, cast
+from typing import Any, Optional, cast
 
 import astor
-
-T = TypeVar("T", bound=ast.AST)
 
 
 class TargetNotFoundError(Exception):
@@ -77,7 +75,7 @@ class NodeModifier(ast.NodeTransformer):
     ):
         self.target_node = target_node
         parsed = ast.parse(new_code)
-        self.new_node = parsed.body[0]  # Remove unnecessary cast
+        self.new_node = parsed.body[0]
         self.position = position
         self.skip_next = False
 
@@ -136,7 +134,8 @@ def modify_source(source: str, new_code: str, target: str, position: str) -> str
     # Add parent references to all nodes
     for parent in ast.walk(tree):
         for child in ast.iter_child_nodes(parent):
-            child.parent = parent
+            child = cast(ExtendedAST, child)
+            child.parent = cast(ExtendedAST, parent)
 
     nodes = find_nodes(tree, target)
     if not nodes:

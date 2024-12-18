@@ -5,6 +5,7 @@ import os
 import signal
 import subprocess
 from pathlib import Path
+from typing import Any
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("pyright_debug")
@@ -17,7 +18,7 @@ write_pipe = os.fdopen(write_fd, "wb")
 read_pipe = os.fdopen(lsp_read_fd, "rb")
 
 
-async def test_diagnostics():
+async def test_diagnostics() -> None:
     # Start server with binary mode
     process = subprocess.Popen(
         ["pyright-langserver", "--stdio", "--verbose"],
@@ -27,19 +28,19 @@ async def test_diagnostics():
         bufsize=0,  # Unbuffered
     )
 
-    def encode_message(msg):
+    def encode_message(msg: dict[str, Any]) -> bytes:
         content = json.dumps(msg).encode("utf-8")
         header = f"Content-Length: {len(content)}\r\n\r\n".encode()
         return header + content
 
-    async def write_message(msg):
+    async def write_message(msg: dict[str, Any]) -> None:
         encoded = encode_message(msg)
         logger.debug(f"-> {msg.get('method', 'response')}")
         write_pipe.write(encoded)
         write_pipe.flush()
         await asyncio.sleep(0.1)
 
-    async def read_message():
+    async def read_message() -> dict[str, Any] | None:
         try:
             # Read headers
             header = b""
@@ -77,9 +78,9 @@ async def test_diagnostics():
             logger.error(f"Error reading: {e}")
             return None
 
-    async def handle_server_request(msg):
-        method = msg.get("method")
-        msg_id = msg.get("id")
+    async def handle_server_request(msg: dict[str, Any]) -> None:
+        method: str = msg.get("method", "")
+        msg_id: Any = msg.get("id")
 
         if method == "client/registerCapability":
             await write_message({"jsonrpc": "2.0", "id": msg_id, "result": None})
@@ -173,9 +174,10 @@ async def test_diagnostics():
 
         # Open document
         doc_uri = f"file://{Path('src/mcp_python_helper/test_fixtures/sample_python_code.py').absolute()}"
-        doc_content = Path(
-            "src/mcp_python_helper/test_fixtures/sample_python_code.py"
-        ).read_text()
+        sample_path = Path("src/mcp_python_helper/test_fixtures/sample_python_code.py")
+        if not sample_path.exists():
+            raise FileNotFoundError(f"Sample file not found: {sample_path}")
+        doc_content = sample_path.read_text()
 
         await write_message(
             {
@@ -198,7 +200,7 @@ async def test_diagnostics():
         start = asyncio.get_event_loop().time()
         while (asyncio.get_event_loop().time() - start) < 30:
             if process.poll() is not None:
-                stderr = process.stderr.read()
+                stderr = process.stderr.read() if process.stderr else None
                 logger.error(f"Process exited with code {process.poll()}")
                 if stderr:
                     logger.error(f"Stderr: {stderr}")
