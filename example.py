@@ -1,6 +1,14 @@
-def my_func(a: int) -> str:
-    """stringfies"""
-    return str(a)
+var = 3
 
 
-my_func("3")
+def my_func():
+    pass
+
+
+list = []
+printf("hi")
+
+
+class MyClass:
+    def method(self):
+        pass

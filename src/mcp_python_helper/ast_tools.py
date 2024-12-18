@@ -6,6 +6,10 @@ class TargetNotFound(Exception):
     pass
 
 
+class MultipleTargetsFound(Exception):
+    pass
+
+
 class InvalidPosition(Exception):
     pass
 
@@ -69,10 +73,10 @@ class NodeModifier(ast.NodeTransformer):
             if self.position == "replace":
                 return self.new_node
             elif self.position == "before":
-                if isinstance(node.parent, ast.Module):
-                    self.skip_next = True
-                    idx = node.parent.body.index(node)
-                    node.parent.body.insert(idx, self.new_node)
+                # if isinstance(node.parent, ast.Module):
+                self.skip_next = True
+                idx = node.parent.body.index(node)
+                node.parent.body.insert(idx, self.new_node)
                 return self.new_node
             elif self.position == "after":
                 if isinstance(node.parent, ast.Module):
@@ -117,6 +121,9 @@ def modify_source(source, new_code, target, position):
     nodes = find_nodes(tree, target)
     if not nodes:
         raise TargetNotFound("Target not found")
+
+    if len(nodes) > 1:
+        raise MultipleTargetsFound(f"{len(nodes)} targets found")
 
     for node in nodes:
         modifier = NodeModifier(node, new_code, position)
