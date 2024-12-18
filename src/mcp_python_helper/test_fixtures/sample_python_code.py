@@ -1,8 +1,9 @@
-from typing import List, Dict, Optional, TypeVar, Generic, Callable
-from dataclasses import dataclass
-from enum import Enum
 import asyncio
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
+from typing import Generic, TypeVar
 
 # Constants
 MAX_RETRIES = 3
@@ -50,7 +51,7 @@ class User:
 class Point:
     x: float
     y: float
-    label: Optional[str] = None
+    label: str | None = None
 
     def distance_from_origin(self) -> float:
         return (self.x**2 + self.y**2) ** 0.5
@@ -62,18 +63,18 @@ T = TypeVar("T")
 
 class Queue(Generic[T]):
     def __init__(self):
-        self.items: List[T] = []
+        self.items: list[T] = []
 
     def enqueue(self, item: T) -> None:
         self.items.append(item)
 
-    def dequeue(self) -> Optional[T]:
+    def dequeue(self) -> T | None:
         return self.items.pop(0) if self.items else None
 
 
 # Function with type hints and default values
 def calculate_discount(
-    price: float, discount_percent: float = 10.0, max_discount: Optional[float] = None
+    price: float, discount_percent: float = 10.0, max_discount: float | None = None
 ) -> float:
     discount = price * (discount_percent / 100)
     if max_discount is not None:
@@ -82,7 +83,7 @@ def calculate_discount(
 
 
 # Async function
-async def fetch_data(url: str, timeout: float = DEFAULT_TIMEOUT) -> Dict[str, any]:
+async def fetch_data(url: str, timeout: float = DEFAULT_TIMEOUT) -> dict[str, any]:
     await asyncio.sleep(0.1)  # Simulate network delay
     return {"url": url, "status": Status.COMPLETED}
 
@@ -133,7 +134,7 @@ class Loggable:
 
 
 class Serializable:
-    def to_dict(self) -> Dict[str, any]:
+    def to_dict(self) -> dict[str, any]:
         return self.__dict__
 
 
@@ -187,4 +188,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
