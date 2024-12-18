@@ -40,4 +40,3 @@ async def main() -> None:
                 ),
             ),
         )
-

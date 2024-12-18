@@ -21,8 +21,6 @@ async def test_diagnostics():
     # Start server with binary mode
     process = subprocess.Popen(
         ["pyright-langserver", "--stdio", "--verbose"],
-        # stdin=subprocess.PIPE,
-        # stdout=subprocess.PIPE,
         stdin=read_fd,
         stdout=lsp_write_fd,
         stderr=subprocess.PIPE,  # not sure if I should make pipe for this too
@@ -37,8 +35,6 @@ async def test_diagnostics():
     async def write_message(msg):
         encoded = encode_message(msg)
         logger.debug(f"-> {msg.get('method', 'response')}")
-        # process.stdin.write(encoded)
-        # process.stdin.flush()
         write_pipe.write(encoded)
         write_pipe.flush()
         await asyncio.sleep(0.1)
@@ -49,7 +45,6 @@ async def test_diagnostics():
             header = b""
             while b"\r\n\r\n" not in header:
                 next_char = await asyncio.get_event_loop().run_in_executor(
-                    # None, lambda: process.stdout.read(1)
                     None,
                     lambda: read_pipe.read(1),
                 )
@@ -63,7 +58,6 @@ async def test_diagnostics():
 
             # Read content
             content = await asyncio.get_event_loop().run_in_executor(
-                # None, lambda: process.stdout.read(content_length)
                 None,
                 lambda: read_pipe.read(content_length),
             )
@@ -241,7 +235,7 @@ async def test_diagnostics():
                 logger.error(f"Error during cleanup: {e}")
                 try:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                except:
+                except Exception:
                     pass
 
 
