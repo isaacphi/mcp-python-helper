@@ -10,14 +10,23 @@ import signal
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("pyright_debug")
 
+read_fd, write_fd = os.pipe()  # pipe for sending to LSP
+lsp_read_fd, lsp_write_fd = os.pipe()  # pipe for receiving from LSP
+
+# Create file objects for your end of the pipes
+write_pipe = os.fdopen(write_fd, "wb")
+read_pipe = os.fdopen(lsp_read_fd, "rb")
+
 
 async def test_diagnostics():
     # Start server with binary mode
     process = subprocess.Popen(
         ["pyright-langserver", "--stdio", "--verbose"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        # stdin=subprocess.PIPE,
+        # stdout=subprocess.PIPE,
+        stdin=read_fd,
+        stdout=lsp_write_fd,
+        stderr=subprocess.PIPE,  # not sure if I should make pipe for this too
         bufsize=0,  # Unbuffered
     )
 
@@ -29,8 +38,10 @@ async def test_diagnostics():
     async def write_message(msg):
         encoded = encode_message(msg)
         logger.debug(f"-> {msg.get('method', 'response')}")
-        process.stdin.write(encoded)
-        process.stdin.flush()
+        # process.stdin.write(encoded)
+        # process.stdin.flush()
+        write_pipe.write(encoded)
+        write_pipe.flush()
         await asyncio.sleep(0.1)
 
     async def read_message():
@@ -39,7 +50,9 @@ async def test_diagnostics():
             header = b""
             while b"\r\n\r\n" not in header:
                 next_char = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: process.stdout.read(1)
+                    # None, lambda: process.stdout.read(1)
+                    None,
+                    lambda: read_pipe.read(1),
                 )
                 if not next_char:
                     return None
@@ -51,7 +64,9 @@ async def test_diagnostics():
 
             # Read content
             content = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: process.stdout.read(content_length)
+                # None, lambda: process.stdout.read(content_length)
+                None,
+                lambda: read_pipe.read(content_length),
             )
 
             try:
@@ -231,4 +246,3 @@ async def test_diagnostics():
 
 if __name__ == "__main__":
     asyncio.run(test_diagnostics())
-
