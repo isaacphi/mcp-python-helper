@@ -27,7 +27,7 @@ class LocateSymbolTool:
     description = "Locate the definition of a Python symbol in the codebase"
 
     def __init__(self) -> None:
-        self._server: LSPServer | None = None
+        self.server: LSPServer | None = None
         self.lsp: LSPOperations | None = None
 
     @property
@@ -51,8 +51,8 @@ class LocateSymbolTool:
         try:
             workspace_path = Path(args.workspace_root)
 
-            if not self._server or self._server.workspace_root != workspace_path:
-                self._server = LSPServer(
+            if not self.server or self.server.workspace_root != workspace_path:
+                self.server = LSPServer(
                     workspace_root=workspace_path,
                     command=["pyright-langserver", "--stdio", "--verbose"],
                     server_settings={
@@ -67,9 +67,9 @@ class LocateSymbolTool:
                     },
                 )
 
-                await self._server.shutdown()
-                await self._server.initialize()
-                self.lsp = LSPOperations(self._server)
+                await self.server.shutdown()
+                await self.server.initialize()
+                self.lsp = LSPOperations(self.server)
 
             if not self.lsp:
                 raise RuntimeError("LSP operations not initialized")

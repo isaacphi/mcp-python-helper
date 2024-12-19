@@ -29,12 +29,12 @@ class LSPOperations:
     """High-level operations for working with LSP servers."""
 
     def __init__(self, server: LSPRequester):
-        self._server = server
+        self.server = server
 
     async def find_symbol(self, symbol_name: str) -> list[WorkspaceSymbol]:
         """Find the location of a symbol in the workspace."""
         params = WorkspaceSymbolParams(query=symbol_name)
-        response = await self._server.request("workspace/symbol", params.model_dump())
+        response = await self.server.request("workspace/symbol", params.model_dump())
         if not response:
             return []
 
@@ -51,7 +51,7 @@ class LSPOperations:
             textDocument=TextDocumentIdentifier(uri=file_uri),
             position=position,
         )
-        response = await self._server.request(
+        response = await self.server.request(
             "textDocument/typeDefinition", params.model_dump()
         )
 
@@ -74,7 +74,7 @@ class LSPOperations:
             position=position,
             context=ReferenceContext(includeDeclaration=include_declaration),
         )
-        response = await self._server.request(
+        response = await self.server.request(
             "textDocument/references", params.model_dump()
         )
 
@@ -91,7 +91,7 @@ class LSPOperations:
             textDocument=TextDocumentIdentifier(uri=file_uri),
             position=position,
         )
-        response = await self._server.request("textDocument/hover", params.model_dump())
+        response = await self.server.request("textDocument/hover", params.model_dump())
 
         if not response:
             return None
@@ -100,7 +100,7 @@ class LSPOperations:
 
     async def get_document_symbols(self, file_uri: str) -> list[DocumentSymbol]:
         """Get all symbols in a document."""
-        response = await self._server.request(
+        response = await self.server.request(
             "textDocument/documentSymbol",
             {"textDocument": {"uri": file_uri}},
         )
@@ -118,7 +118,7 @@ class LSPOperations:
             textDocument=TextDocumentIdentifier(uri=file_uri),
             position=position,
         )
-        response = await self._server.request(
+        response = await self.server.request(
             "textDocument/implementation", params.model_dump()
         )
 
@@ -138,7 +138,7 @@ class LSPOperations:
             textDocument=TextDocumentIdentifier(uri=file_uri),
             position=position,
         )
-        response = await self._server.request(
+        response = await self.server.request(
             "textDocument/definition", params.model_dump()
         )
 
@@ -160,7 +160,7 @@ class LSPOperations:
             textDocument=TextDocumentIdentifier(uri=file_uri),
             position=position,
         )
-        return await self._server.request(
+        return await self.server.request(
             "textDocument/prepareRename", params.model_dump()
         )
 
@@ -173,4 +173,4 @@ class LSPOperations:
             position=position,
             newName=new_name,
         )
-        return await self._server.request("textDocument/rename", params.model_dump())
+        return await self.server.request("textDocument/rename", params.model_dump())
