@@ -1,9 +1,9 @@
 import pytest
 import logging
-import json
 from pathlib import Path
 
-from mcp_python_helper.utils.pyright_lsp import LSPServer
+from mcp_python_helper.utils.lsp.base import LSPServer
+from mcp_python_helper.utils.lsp.operations import LSPOperations
 
 # Set up logging for tests
 logging.basicConfig(level=logging.DEBUG)
@@ -11,24 +11,16 @@ logger = logging.getLogger("pyright_test")
 
 
 @pytest.mark.asyncio
-async def test_lsp_server_initialization(
-    lsp_server: LSPServer, sample_project_path: Path
-):
+async def test_lsp_server_initialization(lsp: LSPOperations):
     """Test that the LSP server initializes correctly."""
-    logger.info(
-        f"Starting initialization test with project path: {sample_project_path}"
-    )
-    logger.info("Server initialization completed")
-    assert lsp_server._is_initialized, "Server failed to initialize"
-    logger.info(
-        "Server capabilities: %s", json.dumps(lsp_server._server_capabilities, indent=2)
-    )
+    assert lsp._server._is_initialized, "Server failed to initialize"  # pyright: ignore
 
 
 @pytest.mark.asyncio
-async def test_find_class(lsp_server: LSPServer, sample_project_path: Path):
+async def test_find_class(lsp: LSPOperations):
     """Test finding a class definition."""
-    results = await lsp_server.find_symbol("MyClass")
+    results = await lsp.find_symbol("MyClass")
+
     assert len(results) == 1, f"Expected 1 result for MyClass, got {len(results)}"
     result = results[0]
     assert result["name"] == "MyClass"
@@ -37,9 +29,9 @@ async def test_find_class(lsp_server: LSPServer, sample_project_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_find_function(lsp_server: LSPServer, sample_project_path: Path):
+async def test_find_function(lsp: LSPOperations):
     """Test finding a function definition."""
-    results = await lsp_server.find_symbol("my_function")
+    results = await lsp.find_symbol("my_function")
     assert len(results) == 1
     result = results[0]
     assert result["name"] == "my_function"
@@ -48,9 +40,9 @@ async def test_find_function(lsp_server: LSPServer, sample_project_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_find_constant(lsp_server: LSPServer, sample_project_path: Path):
+async def test_find_constant(lsp: LSPOperations):
     """Test finding a constant definition."""
-    results = await lsp_server.find_symbol("CONSTANT")
+    results = await lsp.find_symbol("CONSTANT")
     assert len(results) == 1, f"Expected 1 result for CONSTANT, got {len(results)}"
     result = results[0]
     assert result["name"] == "CONSTANT", f"Expected 'CONSTANT', got '{result['name']}'"
@@ -59,18 +51,16 @@ async def test_find_constant(lsp_server: LSPServer, sample_project_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_find_nonexistent_symbol(
-    lsp_server: LSPServer, sample_project_path: Path
-):
+async def test_find_nonexistent_symbol(lsp: LSPOperations):
     """Test finding a symbol that doesn't exist."""
-    results = await lsp_server.find_symbol("NonExistentSymbol")
+    results = await lsp.find_symbol("NonExistentSymbol")
     assert len(results) == 0
 
 
 @pytest.mark.asyncio
-async def test_find_multiple_symbols(lsp_server: LSPServer, sample_project_path: Path):
+async def test_find_multiple_symbols(lsp: LSPOperations):
     """Test finding multiple symbols with similar names."""
-    results = await lsp_server.find_symbol("method")
+    results = await lsp.find_symbol("method")
     assert len(results) == 2, f"Expected 2 results for 'method', got {len(results)}"
     names = {r["name"] for r in results}
     assert "my_method" in names
@@ -78,10 +68,10 @@ async def test_find_multiple_symbols(lsp_server: LSPServer, sample_project_path:
 
 
 @pytest.mark.asyncio
-async def test_server_shutdown(lsp_server: LSPServer, sample_project_path: Path):
+async def test_server_shutdown(lsp: LSPOperations):
     """Test that the server shuts down cleanly."""
-    assert lsp_server._is_initialized, "Server should be initialized before shutdown"
-    await lsp_server.shutdown()
-    assert not lsp_server._is_initialized
-    process_status = lsp_server._process.poll() if lsp_server._process else None
-    assert lsp_server._process is None or process_status is not None
+    assert lsp._server._is_initialized  # pyright: ignore
+    await lsp._server.shutdown()  # pyright: ignore
+    assert not lsp._server._is_initialized  # pyright: ignore
+    process_status = lsp._server._process.poll() if lsp._server._process else None  # pyright: ignore
+    assert lsp._server._process is None or process_status is not None  # pyright: ignore

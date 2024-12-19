@@ -48,7 +48,6 @@ reportMissingTypeStubs = true
 strictListInference = true
 strictDictionaryInference = true
 strictParameterNoneValue = true
-enableTypeIgnoreComments = false
 stubPath = "src/mcp_python_helper/types"
 
 [tool.ruff]
@@ -76,11 +75,3 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 
-[dependency-groups]
-dev = [
-    "pytest-asyncio>=0.25.0",
-    "pytest>=8.3.4",
-]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"

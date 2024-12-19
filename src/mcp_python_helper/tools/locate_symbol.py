@@ -5,7 +5,8 @@ from typing import Any
 import mcp.types as types
 from pydantic import BaseModel, Field
 
-from mcp_python_helper.utils.pyright_lsp import LSPServer
+from mcp_python_helper.utils.lsp.base import LSPServer
+from mcp_python_helper.utils.lsp.operations import LSPOperations
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class LocateSymbolTool:
 
     def __init__(self) -> None:
         self._server: LSPServer | None = None
+        self.lsp: LSPOperations | None = None
 
     @property
     def schema(self) -> dict[str, Any]:
@@ -51,11 +53,27 @@ class LocateSymbolTool:
             workspace_path = Path(args.workspace_root)
 
             if not self._server or self._server.workspace_root != workspace_path:
-                self._server = LSPServer(workspace_path)
+                self._server = LSPServer(
+                    workspace_root=workspace_path,
+                    command=["pyright-langserver", "--stdio", "--verbose"],
+                    server_settings={
+                        "python": {
+                            "analysis": {
+                                "autoSearchPaths": True,
+                                "diagnosticMode": "workspace",
+                                "typeCheckingMode": "basic",
+                                "useLibraryCodeForTypes": True,
+                            }
+                        }
+                    },
+                )
+
+                await self._server.shutdown()
                 await self._server.initialize()
+                self.lsp = LSPOperations(self._server)
 
             # Find the symbol
-            locations = await self._server.find_symbol(args.symbol)
+            locations = await self.lsp.find_symbol(args.symbol)
 
             if not locations:
                 return [
