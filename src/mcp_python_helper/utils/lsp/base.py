@@ -7,12 +7,15 @@ import os
 import signal
 import subprocess
 from collections.abc import Sequence
+from io import IOBase
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("lsp_debug")
+
+T = TypeVar("T")  # For subprocess.Popen generic type
 
 
 def _format_lsp_message(prefix: str, msg: dict[str, Any]) -> str:
@@ -40,9 +43,9 @@ class LSPServer:
         initialization_options: dict[str, Any] | None = None,
         server_settings: dict[str, Any] | None = None,
     ) -> None:
-        self._process: subprocess.Popen | None = None
-        self._write_pipe: os.IOBase | None = None
-        self._read_pipe: os.IOBase | None = None
+        self._process: subprocess.Popen[bytes] | None = None
+        self._write_pipe: IOBase | None = None
+        self._read_pipe: IOBase | None = None
         self._read_fd: int | None = None
         self._write_fd: int | None = None
         self._lsp_read_fd: int | None = None
@@ -232,8 +235,7 @@ class LSPServer:
             header = b""
             while b"\r\n\r\n" not in header:
                 next_char = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: self._read_pipe.read(1),  # type: ignore
+                    None, lambda: cast(IOBase, self._read_pipe).read(1)
                 )
                 if not next_char:
                     return None
@@ -245,8 +247,7 @@ class LSPServer:
 
             # Read content
             content = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self._read_pipe.read(content_length),  # type: ignore
+                None, lambda: cast(IOBase, self._read_pipe).read(content_length)
             )
 
             msg = json.loads(content.decode("utf-8"))
@@ -331,7 +332,7 @@ class LSPServer:
 
                 if self._process.poll() is None:
                     logger.info("Server still running, sending SIGTERM...")
-                    os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)  # type: ignore
+                    os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
                     self._process.wait(timeout=5)
 
         except Exception as e:
@@ -339,7 +340,7 @@ class LSPServer:
             if self._process and self._process.poll() is None:
                 try:
                     logger.warning("Forcing server termination with SIGKILL...")
-                    os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)  # type: ignore
+                    os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
                 except Exception as e2:
                     logger.error(f"Error killing server process: {e2}")
 
@@ -350,3 +351,4 @@ class LSPServer:
             if self._read_pipe:
                 self._read_pipe.close()
             logger.info("Server shutdown complete")
+

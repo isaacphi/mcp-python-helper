@@ -1,8 +1,9 @@
 import logging
 
 import pytest
+
 from mcp_python_helper.utils.lsp.operations import LSPOperations
-from mcp_python_helper.utils.lsp.types import Location, Range, Position, WorkspaceSymbol
+from mcp_python_helper.utils.lsp.types import WorkspaceSymbol
 
 # Set up logging for tests
 logging.basicConfig(level=logging.DEBUG)
