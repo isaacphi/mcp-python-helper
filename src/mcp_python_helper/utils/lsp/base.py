@@ -6,8 +6,9 @@ import logging
 import os
 import signal
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, List, Sequence
+from typing import Any
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG)
@@ -36,16 +37,16 @@ class LSPServer:
         self,
         workspace_root: Path,
         command: Sequence[str],
-        initialization_options: Optional[dict[str, Any]] = None,
-        server_settings: Optional[dict[str, Any]] = None,
+        initialization_options: dict[str, Any] | None = None,
+        server_settings: dict[str, Any] | None = None,
     ) -> None:
-        self._process: Optional[subprocess.Popen] = None
-        self._write_pipe: Optional[os.IOBase] = None
-        self._read_pipe: Optional[os.IOBase] = None
-        self._read_fd: Optional[int] = None
-        self._write_fd: Optional[int] = None
-        self._lsp_read_fd: Optional[int] = None
-        self._lsp_write_fd: Optional[int] = None
+        self._process: subprocess.Popen | None = None
+        self._write_pipe: os.IOBase | None = None
+        self._read_pipe: os.IOBase | None = None
+        self._read_fd: int | None = None
+        self._write_fd: int | None = None
+        self._lsp_read_fd: int | None = None
+        self._lsp_write_fd: int | None = None
         self._is_initialized = False
         self._msg_id = 0
         self._server_capabilities: dict[str, Any] = {}
@@ -222,7 +223,7 @@ class LSPServer:
         self._write_pipe.flush()
         await asyncio.sleep(0.1)
 
-    async def _read_message(self) -> Optional[dict[str, Any]]:
+    async def _read_message(self) -> dict[str, Any] | None:
         """Read a message from the LSP server."""
         if not self._read_pipe:
             raise Exception("Server not initialized")
@@ -258,7 +259,7 @@ class LSPServer:
 
     async def request(
         self, method: str, params: dict[str, Any]
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Send a request to the LSP server and wait for response."""
         if not self._is_initialized:
             raise Exception("Server not initialized")

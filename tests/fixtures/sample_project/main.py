@@ -1,4 +1,4 @@
-from typing import Optional
+# Test File
 
 
 class MyClass:
@@ -17,5 +17,5 @@ CONSTANT = 42
 
 
 class AnotherClass:
-    def another_method(self) -> Optional[str]:
+    def another_method(self) -> str | None:
         return None

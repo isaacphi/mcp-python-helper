@@ -49,7 +49,6 @@ class LocateSymbolTool:
         self, args: LocateSymbolArguments
     ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
         try:
-            # Initialize server if needed
             workspace_path = Path(args.workspace_root)
 
             if not self._server or self._server.workspace_root != workspace_path:
@@ -72,10 +71,9 @@ class LocateSymbolTool:
                 await self._server.initialize()
                 self.lsp = LSPOperations(self._server)
 
-            # Find the symbol
-            locations = await self.lsp.find_symbol(args.symbol)
+            symbols = await self.lsp.find_symbol(args.symbol)
 
-            if not locations:
+            if not symbols:
                 return [
                     types.TextContent(
                         type="text",
@@ -83,16 +81,18 @@ class LocateSymbolTool:
                     )
                 ]
 
-            # Format the results
             results = []
-            for loc in locations:
-                relative_path = Path(loc["filename"]).relative_to(workspace_path)
+            for symbol in symbols:
+                file_path = Path(symbol.location.uri.replace("file://", ""))
+                relative_path = file_path.relative_to(workspace_path)
                 result = (
-                    f"Found {loc['name']} ({loc['kind']}) in:\n"
+                    f"Found {symbol.name} ({symbol.kind}) in:\n"
                     f"  File: {relative_path}\n"
-                    f"  Line {loc['start']['line'] + 1}, "
-                    f"Column {loc['start']['character'] + 1}"
+                    f"  Line {symbol.location.range.start.line + 1}, "
+                    f"Column {symbol.location.range.start.character + 1}"
                 )
+                if symbol.containerName:
+                    result += f"\n  Container: {symbol.containerName}"
                 results.append(result)
 
             return [
@@ -110,3 +110,4 @@ class LocateSymbolTool:
                     text=f"Error locating symbol: {e!s}",
                 )
             ]
+

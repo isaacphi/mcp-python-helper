@@ -1,9 +1,10 @@
 import pytest
 import pytest_asyncio
 from mcp_python_helper.tools.locate_symbol import (
-    LocateSymbolTool,
     LocateSymbolArguments,
+    LocateSymbolTool,
 )
+from mcp_python_helper.utils.lsp.types import WorkspaceSymbol
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -100,3 +101,4 @@ async def test_tool_reuses_server(symbol_tool, sample_project_path):
     # Second request should reuse server
     await symbol_tool.execute(args)
     assert symbol_tool._server is first_server
+

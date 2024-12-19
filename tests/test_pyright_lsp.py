@@ -1,9 +1,8 @@
-import pytest
 import logging
-from pathlib import Path
 
-from mcp_python_helper.utils.lsp.base import LSPServer
+import pytest
 from mcp_python_helper.utils.lsp.operations import LSPOperations
+from mcp_python_helper.utils.lsp.types import Location, Range, Position, WorkspaceSymbol
 
 # Set up logging for tests
 logging.basicConfig(level=logging.DEBUG)
@@ -23,9 +22,10 @@ async def test_find_class(lsp: LSPOperations):
 
     assert len(results) == 1, f"Expected 1 result for MyClass, got {len(results)}"
     result = results[0]
-    assert result["name"] == "MyClass"
-    assert "main.py" in result["filename"]
-    assert result["start"]["line"] == 3
+    assert isinstance(result, WorkspaceSymbol)
+    assert result.name == "MyClass"
+    assert "main.py" in result.location.uri
+    assert result.location.range.start.line == 3
 
 
 @pytest.mark.asyncio
@@ -34,9 +34,10 @@ async def test_find_function(lsp: LSPOperations):
     results = await lsp.find_symbol("my_function")
     assert len(results) == 1
     result = results[0]
-    assert result["name"] == "my_function"
-    assert "main.py" in result["filename"]
-    assert result["start"]["line"] == 11
+    assert isinstance(result, WorkspaceSymbol)
+    assert result.name == "my_function"
+    assert "main.py" in result.location.uri
+    assert result.location.range.start.line == 11
 
 
 @pytest.mark.asyncio
@@ -45,9 +46,10 @@ async def test_find_constant(lsp: LSPOperations):
     results = await lsp.find_symbol("CONSTANT")
     assert len(results) == 1, f"Expected 1 result for CONSTANT, got {len(results)}"
     result = results[0]
-    assert result["name"] == "CONSTANT", f"Expected 'CONSTANT', got '{result['name']}'"
-    assert "main.py" in result["filename"]
-    assert result["start"]["line"] == 15
+    assert isinstance(result, WorkspaceSymbol)
+    assert result.name == "CONSTANT", f"Expected 'CONSTANT', got '{result.name}'"
+    assert "main.py" in result.location.uri
+    assert result.location.range.start.line == 15
 
 
 @pytest.mark.asyncio
@@ -62,7 +64,7 @@ async def test_find_multiple_symbols(lsp: LSPOperations):
     """Test finding multiple symbols with similar names."""
     results = await lsp.find_symbol("method")
     assert len(results) == 2, f"Expected 2 results for 'method', got {len(results)}"
-    names = {r["name"] for r in results}
+    names = {r.name for r in results}
     assert "my_method" in names
     assert "another_method" in names
 
@@ -75,3 +77,4 @@ async def test_server_shutdown(lsp: LSPOperations):
     assert not lsp._server._is_initialized  # pyright: ignore
     process_status = lsp._server._process.poll() if lsp._server._process else None  # pyright: ignore
     assert lsp._server._process is None or process_status is not None  # pyright: ignore
+
