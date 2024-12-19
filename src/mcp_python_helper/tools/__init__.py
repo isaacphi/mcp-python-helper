@@ -20,6 +20,8 @@ async def handle_tool_call(name: str, arguments: dict[str, Any] | None):
         if tool.name == name:
             if not arguments:
                 raise ValueError("Missing arguments")
-            args = tool.arg_type(**arguments)  # type: ignore
-            return await tool.execute(args)
+
+            args = tool.arg_type(**arguments)  # type: ignore[arg-type]
+            return await tool.execute(args)  # type: ignore[arg-type]
+
     raise ValueError(f"Unknown tool: {name}")

@@ -71,6 +71,9 @@ class LocateSymbolTool:
                 await self._server.initialize()
                 self.lsp = LSPOperations(self._server)
 
+            if not self.lsp:
+                raise RuntimeError("LSP operations not initialized")
+
             symbols = await self.lsp.find_symbol(args.symbol)
 
             if not symbols:
@@ -81,7 +84,7 @@ class LocateSymbolTool:
                     )
                 ]
 
-            results = []
+            results: list[str] = []
             for symbol in symbols:
                 file_path = Path(symbol.location.uri.replace("file://", ""))
                 relative_path = file_path.relative_to(workspace_path)
@@ -110,4 +113,3 @@ class LocateSymbolTool:
                     text=f"Error locating symbol: {e!s}",
                 )
             ]
-

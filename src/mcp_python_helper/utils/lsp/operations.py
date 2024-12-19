@@ -174,4 +174,3 @@ class LSPOperations:
             newName=new_name,
         )
         return await self._server.request("textDocument/rename", params.model_dump())
-

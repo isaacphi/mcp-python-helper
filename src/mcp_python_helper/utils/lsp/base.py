@@ -351,4 +351,3 @@ class LSPServer:
             if self._read_pipe:
                 self._read_pipe.close()
             logger.info("Server shutdown complete")
-

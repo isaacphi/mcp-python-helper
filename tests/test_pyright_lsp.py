@@ -1,7 +1,6 @@
 import logging
 
 import pytest
-
 from mcp_python_helper.utils.lsp.operations import LSPOperations
 from mcp_python_helper.utils.lsp.types import WorkspaceSymbol
 
@@ -78,4 +77,3 @@ async def test_server_shutdown(lsp: LSPOperations):
     assert not lsp._server._is_initialized  # pyright: ignore
     process_status = lsp._server._process.poll() if lsp._server._process else None  # pyright: ignore
     assert lsp._server._process is None or process_status is not None  # pyright: ignore
-
