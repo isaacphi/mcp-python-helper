@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 import pytest_asyncio
 from mcp.types import EmbeddedResource, ImageContent, TextContent
+
 from mcp_python_helper.tools.locate_symbol import (
     LocateSymbolArguments,
     LocateSymbolTool,

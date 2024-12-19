@@ -12,7 +12,7 @@ logger = logging.getLogger("pyright_test")
 @pytest.mark.asyncio
 async def test_lsp_server_initialization(lsp: LSPOperations):
     """Test that the LSP server initializes correctly."""
-    assert lsp._server._is_initialized, "Server failed to initialize"  # pyright: ignore
+    assert lsp.server._is_initialized, "Server failed to initialize"  # pyright: ignore
 
 
 @pytest.mark.asyncio
@@ -72,8 +72,8 @@ async def test_find_multiple_symbols(lsp: LSPOperations):
 @pytest.mark.asyncio
 async def test_server_shutdown(lsp: LSPOperations):
     """Test that the server shuts down cleanly."""
-    assert lsp._server._is_initialized  # pyright: ignore
-    await lsp._server.shutdown()  # pyright: ignore
-    assert not lsp._server._is_initialized  # pyright: ignore
-    process_status = lsp._server._process.poll() if lsp._server._process else None  # pyright: ignore
-    assert lsp._server._process is None or process_status is not None  # pyright: ignore
+    assert lsp.server._is_initialized  # pyright: ignore
+    await lsp.server.shutdown()  # pyright: ignore
+    assert not lsp.server._is_initialized  # pyright: ignore
+    process_status = lsp.server._process.poll() if lsp.server._process else None  # pyright: ignore
+    assert lsp.server._process is None or process_status is not None  # pyright: ignore
